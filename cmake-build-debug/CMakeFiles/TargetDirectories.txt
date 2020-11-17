@@ -1,0 +1,3 @@
+/Users/xittz/University/CUDA/matrices_without_cuda/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/Users/xittz/University/CUDA/matrices_without_cuda/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/xittz/University/CUDA/matrices_without_cuda/cmake-build-debug/CMakeFiles/matrices_without_cuda.dir
