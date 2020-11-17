@@ -5,7 +5,7 @@
 using namespace std;
 
 #define VERTICES 1000
-#define EDGES 2000
+#define EDGES 5000
 
 #define CHECK(value) {                                          \
     cudaError_t _m_cudaStat = value;                                        \
@@ -15,23 +15,23 @@ using namespace std;
         exit(1);                                                            \
     } }
 
-__global__ void generateEdgeList(int* in, int* out, int edges, int vertices)
-{
-    int col = threadIdx.x + blockDim.x * blockIdx.x;
-
-    if (col >= edges) return;
-
-    int innerNumber = 0;
-
-    for (int j = 0; j < vertices; j++) {
-        int idx = col * edges + j;
-        if (in[idx] == 1) {
-            out[2 * col + innerNumber] = j;
-            innerNumber += 1;
-            if (innerNumber == 2) break;
-        }
-    }
-}
+//__global__ void generateEdgeList(int* in, int* out, int edges, int vertices)
+//{
+//    int col = threadIdx.x + blockDim.x * blockIdx.x;
+//
+//    if (col >= edges) return;
+//
+//    int innerNumber = 0;
+//
+//    for (int j = 0; j < vertices; j++) {
+//        int idx = col * edges + j;
+//        if (in[idx] == 1) {
+//            out[2 * col + innerNumber] = j;
+//            innerNumber += 1;
+//            if (innerNumber == 2) break;
+//        }
+//    }
+//}
 
 /**
  * @param in - incidence matrix stored by columns, of size { edges * vertices }
@@ -86,25 +86,27 @@ void printMatrix(int *matrix, int edges, int vertices) {
     cout << "===========================" << endl << "Matrix:" << endl;
     for (int i = 0; i < edges; i++) {
         for (int j = 0; j < vertices; j++) {
-            cout << matrix[i * edges + j] << ", ";
+            cout << matrix[i * vertices + j] << ", ";
         }
         cout << endl;
     }
     cout << endl << "===========================" << endl;
 }
 
-tuple<int, int> makeRandomPair(int min, int max) {
-    int first = rand() %(max-min+1)+min;
-    int second = first;
-    while (second == first) second = rand() %(max-min+1)+min;
-    return make_tuple(first, second);
-}
-
-void generateMatrix(int* out, int edges, int vertices) {
+void generateMatrix(int* out, const int edges, int vertices) {
     for (int i = 0; i < edges; i++) {
-        auto pair = makeRandomPair(0, vertices - 1);
-        out[i * edges + get<0>(pair)] = 1;
-        out[i * edges + get<1>(pair)] = 1;
+        // cover edge, should set values in the range of [0; vertices)
+        int first = rand() % vertices;
+        int second = first;
+        while (second == first) second = rand() % vertices;
+
+        int firstIndex = i * vertices + first;
+        int secondIndex = i * vertices + second;
+
+        cout << "Edge " << i << " = " << "[" << first << ", " << second << "] " << firstIndex << ", " << secondIndex << endl;
+
+        out[firstIndex] = 1;
+        out[secondIndex] = 1;
     }
 }
 
@@ -112,7 +114,7 @@ bool validateGeneration(const int *in, int edges, int vertices) {
     for (int i = 0; i < edges; i++) {
         int count = 0;
         for (int j = 0; j < vertices; j++) {
-            if (in[i * edges + j] == 1) {
+            if (in[i * vertices + j] == 1) {
                 count += 1;
             }
         }
@@ -147,20 +149,23 @@ int main() {
     int edges = EDGES;
     int vertices = VERTICES;
 
-    int* matrix = new int[edges * vertices * 2];
+    int* matrix = new int[edges * vertices];
     int* matrixDevice;
 
-    int* listOfEdges = new int[edges * 4];
-    int* listOfEdgesCPU = new int[edges * 4];
+    int* listOfEdges = new int[edges * 2];
+    int* listOfEdgesCPU = new int[edges * 2];
     int* listOfEdgesDevice;
 
     generateMatrix(matrix, edges, vertices);
+
+    printMatrix(matrix, edges, vertices);
+
     if (!validateGeneration(matrix, edges, vertices)) {
         cout << "Matrix is invalid" << endl;
         return 1;
+    } else {
+        cout << "Matrix is valid" << endl;
     }
-
-    printMatrix(matrix, edges, vertices);
 
     startCPU = clock();
     generateEdgeList(matrix, listOfEdgesCPU, edges, vertices);
@@ -168,38 +173,38 @@ int main() {
     cout << "CPU time = " << elapsedTimeCPU * 1000 << " ms\n";
     cout << "CPU memory throughput = " << vertices * edges * 4 / elapsedTimeCPU / 1024 / 1024 / 1024 << " Gb/s\n";
 
-    cudaEvent_t startCUDA;
-    cudaEvent_t stopCUDA;
-    cudaEventCreate(&startCUDA);
-    cudaEventCreate(&stopCUDA);
-
-    CHECK(cudaMalloc(&matrixDevice, edges * vertices * 4));
-    CHECK(cudaMemcpy(&matrixDevice, matrix, edges * vertices * 4, cudaMemcpyHostToDevice));
-    CHECK(cudaMalloc(&listOfEdgesDevice, edges * 4 * 2));
-
-    cudaEventRecord(startCUDA, 0);
-
-    cudaEventRecord(stopCUDA, 0);
-    cudaEventSynchronize(stopCUDA);
-    CHECK(cudaGetLastError());
-    cudaEventElapsedTime(&elapsedTimeCUDA, startCUDA, stopCUDA);
-
-    CHECK(cudaMemcpy(listOfEdges, listOfEdgesDevice, edges * 2 * 4, cudaMemcpyDeviceToHost));
-
-    cout << "CUDA time = " << elapsedTimeCUDA << " ms\n";
-    cout << "CUDA memory throughput = " << edges * vertices * 4 / elapsedTimeCUDA / 1024 / 1024 / 1024 << " Gb/s\n";
-
-    if (!validateAgainstEachOther(listOfEdges, listOfEdges, edges)) {
-        cout << "Invalid result" << endl;
-    } else {
-        cout << "Valid result" << endl;
-    }
+//    cudaEvent_t startCUDA;
+//    cudaEvent_t stopCUDA;
+//    cudaEventCreate(&startCUDA);
+//    cudaEventCreate(&stopCUDA);
+//
+//    CHECK(cudaMalloc(&matrixDevice, edges * vertices * 4));
+//    CHECK(cudaMemcpy(&matrixDevice, matrix, edges * vertices * 4, cudaMemcpyHostToDevice));
+//    CHECK(cudaMalloc(&listOfEdgesDevice, edges * 4 * 2));
+//
+//    cudaEventRecord(startCUDA, 0);
+//
+//    cudaEventRecord(stopCUDA, 0);
+//    cudaEventSynchronize(stopCUDA);
+//    CHECK(cudaGetLastError());
+//    cudaEventElapsedTime(&elapsedTimeCUDA, startCUDA, stopCUDA);
+//
+//    CHECK(cudaMemcpy(listOfEdges, listOfEdgesDevice, edges * 2 * 4, cudaMemcpyDeviceToHost));
+//
+//    cout << "CUDA time = " << elapsedTimeCUDA << " ms\n";
+//    cout << "CUDA memory throughput = " << edges * vertices * 4 / elapsedTimeCUDA / 1024 / 1024 / 1024 << " Gb/s\n";
+//
+//    if (!validateAgainstEachOther(listOfEdges, listOfEdges, edges)) {
+//        cout << "Invalid result" << endl;
+//    } else {
+//        cout << "Valid result" << endl;
+//    }
 
     delete[] matrix;
-    delete[] matrixDevice;
+//    delete[] matrixDevice;
     delete[] listOfEdges;
     delete[] listOfEdgesCPU;
-    delete[] listOfEdgesDevice;
+//    delete[] listOfEdgesDevice;
 
     return 0;
 }
